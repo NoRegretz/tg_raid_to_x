@@ -1,0 +1,13 @@
+services:
+  raid-notifier:
+    build: .
+    init: true
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_PATH: /app/data/raid-notifier.sqlite
+    volumes:
+      - raid-data:/app/data
+    stop_grace_period: 45s
+volumes:
+  raid-data:
