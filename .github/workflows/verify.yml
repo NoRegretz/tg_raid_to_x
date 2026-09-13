@@ -1,0 +1,46 @@
+name: Verify bot and Docker image
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm audit --omit=dev
+      - name: Build deployment image
+        run: docker build --tag raid-notifier:ci .
+      - name: Validate fresh dry-run configuration without API calls
+        run: docker run --rm --network none -e TELEGRAM_BOT_TOKEN=ci-placeholder -e OWNER_TELEGRAM_ID=42 raid-notifier:ci node src/main.js --check
+      - name: Verify packaged setup helpers
+        run: |
+          docker run --rm --network none raid-notifier:ci node --check scripts/doctor.js
+          docker run --rm --network none raid-notifier:ci node --check scripts/x-account.js
+      - name: Verify persistent state across separate non-root containers
+        run: |
+          docker volume create raid-notifier-ci-data
+          for phase in write read; do
+            docker run --rm --network none \
+              -e DATABASE_PATH=/app/data/raid-notifier.sqlite \
+              -v raid-notifier-ci-data:/app/data \
+              -v "$PWD/scripts/container-smoke.js:/app/scripts/container-smoke.js:ro" \
+              raid-notifier:ci node scripts/container-smoke.js "$phase"
+          done
+      - name: Remove CI-only volume
+        if: always()
+        run: docker volume rm raid-notifier-ci-data || true
