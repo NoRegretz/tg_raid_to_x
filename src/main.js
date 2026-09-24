@@ -65,7 +65,7 @@ async function main() {
         }
         for (const update of updates) {
           if (stop.signal.aborted) break;
-          await service.handleUpdate(update);
+          await service.processUpdate(update);
         }
       }
     };

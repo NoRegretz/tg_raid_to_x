@@ -26,6 +26,20 @@ export function renderText(text, raid) {
     .replaceAll('{started_at}', new Date(raid.date * 1000).toISOString());
 }
 
+// Cut to at most `max` UTF-16 units without splitting an emoji's surrogate pair,
+// which Telegram would reject as invalid UTF-8.
+export function clip(text, max = 4000) {
+  if (text.length <= max) return text;
+  const code = text.charCodeAt(max - 1);
+  return text.slice(0, code >= 0xd800 && code <= 0xdbff ? max - 1 : max);
+}
+
+export const DUPLICATE_TIP = 'Tip: include {started_at} so every raid produces unique text. X rejects repeated identical posts.';
+
+export function duplicateTip(template) {
+  return template.includes('{started_at}') ? '' : `\n${DUPLICATE_TIP}`;
+}
+
 export function validateTemplate(text) {
   return validateText(renderText(text, { targetId: '1234567890123456789', date: 0 }));
 }

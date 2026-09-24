@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { DEFAULT_X_LIMITS } from './x-budget.js';
-import { validateTemplate } from './text.js';
+import { validateTemplate, clip, duplicateTip } from './text.js';
 import { OWNER_GUIDE } from './owner-guide.js';
 
 export const CONTROLS_KEYBOARD = { keyboard: [[{ text: '🎛 Controls' }]], resize_keyboard: true, is_persistent: true };
@@ -80,10 +80,10 @@ export class OwnerPanel {
       let sent;
       if (messageId) {
         try { sent = await s.telegram.call('editMessageText', { chat_id: s.config.ownerId, message_id: messageId,
-          text: text.slice(0, 4000), reply_markup: markup, link_preview_options: { is_disabled: true } }); }
+          text: clip(text), reply_markup: markup, link_preview_options: { is_disabled: true } }); }
         catch { messageId = undefined; }
       }
-      if (!messageId) sent = await s.telegram.send(s.config.ownerId, text.slice(0, 4000), markup);
+      if (!messageId) sent = await s.telegram.send(s.config.ownerId, clip(text), markup);
       const id = messageId || sent?.message_id;
       if (id) this.active = { token, messageId: id, at: s.now(), actions: new Set(rows.flat().map(b => b.callback_data.split(':')[2])) };
     } catch { s.log('Owner controls could not be delivered. Send any message in owner DM to reopen them.'); }
@@ -132,7 +132,7 @@ export class OwnerPanel {
         const result = validateTemplate(message.text);
         if (result.valid) {
           s.store.transaction(() => { s.store.set('text', message.text); s.store.set('offset', updateId + 1); });
-          notice = `✅ Notification saved (${result.length}/280 weighted characters).`;
+          notice = `✅ Notification saved (${result.length}/280 weighted characters).${duplicateTip(message.text)}`;
           this.editing = null;
         } else notice = `Not saved. ${result.error}`;
       }

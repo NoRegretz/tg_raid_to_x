@@ -296,7 +296,8 @@ test('blank topic accepts a non-topic test group but never acts as an all-topics
   await service.handleUpdate(raid(1, { message_thread_id: undefined, text: screenshots.start }));
   await service.deliverOne();
   assert.equal(posts.length, 1);
-  await service.handleUpdate(raid(2, { text: screenshots.start }));
+  // Telegram marks every forum-topic message with is_topic_message.
+  await service.handleUpdate(raid(2, { is_topic_message: true, text: screenshots.start }));
   await service.handleUpdate(raid(3, { message_thread_id: undefined, is_topic_message: true, text: screenshots.start }));
   await service.handleUpdate(raid(4, { message_thread_id: undefined, from: { id: 7, is_bot: false }, text: screenshots.start }));
   await service.deliverOne();

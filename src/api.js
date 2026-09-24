@@ -3,9 +3,20 @@ import { createHmac, createHash } from 'node:crypto';
 import { XBudgetError } from './x-budget.js';
 
 export class ApiError extends Error {
-  constructor(message, { status = 0, uncertain = false, retryAt = 0 } = {}) {
-    super(message); Object.assign(this, { status, uncertain, retryAt });
+  constructor(message, { status = 0, uncertain = false, retryAt = 0, duplicate = false } = {}) {
+    super(message); Object.assign(this, { status, uncertain, retryAt, duplicate });
   }
+}
+
+// X answers an identical recent post with HTTP 403 and a "duplicate content"
+// explanation. Only this boolean leaves the function; the body is never logged.
+async function isDuplicateRejection(response) {
+  if (response.status !== 403) return false;
+  try {
+    const data = await response.json();
+    const reasons = [data?.detail, data?.title, ...(Array.isArray(data?.errors) ? data.errors.map((e) => e?.message) : [])];
+    return reasons.some((reason) => typeof reason === 'string' && /duplicate/i.test(reason));
+  } catch { return false; }
 }
 
 export class Telegram {
@@ -62,8 +73,9 @@ export class XClient {
     if (!response.ok) {
       const retrySeconds = Number(response.headers.get('retry-after'));
       const reset = Number(response.headers.get('x-rate-limit-reset'));
-      throw new ApiError(`X API rejected the request (HTTP ${response.status}).`, {
-        status: response.status,
+      const duplicate = method === 'POST' && await isDuplicateRejection(response);
+      throw new ApiError(`X API rejected the request (HTTP ${response.status}${duplicate ? ', duplicate text' : ''}).`, {
+        status: response.status, duplicate,
         uncertain: method === 'POST' && (response.status >= 500 || response.status === 408),
         retryAt: response.status === 429 ? Math.max(Date.now() + Math.max(1, retrySeconds || 60) * 1000, reset * 1000) : 0,
       });

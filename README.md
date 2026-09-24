@@ -200,7 +200,7 @@ The helper prints the authenticated account name and `X_EXPECTED_USER_ID=...`. V
 4. Tap **Start**, wait for ON confirmation and until the next second, then start one new Raidar raid. Expect one X post and a DM with its link. Refreshes must not add posts.
 5. Tap **Stop** when finished, or deliberately select **Always on** for continuous watching.
 
-An X posting error pauses further attempts. Fix the cause and inspect the account before using **Clear posting pause**. Old attempts never retry automatically. X may reject repeated identical text. The bot creates a normal post; X decides whether followers receive push notifications.
+An X posting error pauses further attempts. Fix the cause and inspect the account before using **Clear posting pause**. Old attempts never retry automatically. The one exception is a duplicate-text rejection: X refuses repeated identical posts, so the bot marks that raid `duplicate`, keeps posting enabled, and skips the same text for 24 hours without spending X requests. Include `{started_at}` in your text so every notification is unique. The bot creates a normal post; X decides whether followers receive push notifications.
 
 ## Owner controls after deployment
 
@@ -263,7 +263,8 @@ Configure an X-side spending limit and disable automatic recharge to provide an 
 | Settings lost after redeploy | Verify the same volume and path. A container filesystem outside the mount is not durable state. |
 | HTTP healthcheck failure / website does not respond | Remove the HTTP healthcheck requirement. This worker has no web server; use logs and owner Health. |
 | Dry-run DMs but no X post | Expected in dry run. Follow step 5 on the hosting platform. |
-| Posting paused / X error | Inspect the X account, permissions, credits and duplicate text. Fix the cause before Clear posting pause. |
+| Posting paused / X error | Inspect the X account, permissions and credits. Fix the cause before Clear posting pause. |
+| Raid shows `duplicate` or is skipped as duplicate | X refused identical text. Add `{started_at}` to your notification text; posting was not paused. |
 | Limit reached | Inspect Usage & limits; wait for rolling usage to expire or increase the configured cap on the host and redeploy. |
 | Telegram HTTP 409 | Stop another poller using the same token. Check other services, old deployments and local copies. |
 | Changed VPS `.env` has no effect | Recreate the container; a plain restart keeps its previous environment. |

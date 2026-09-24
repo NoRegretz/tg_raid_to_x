@@ -32,9 +32,13 @@ export function detectRaid(update, config) {
   const message = update.message || update.edited_message;
   // Authenticate the sender using Telegram's numeric ID before inspecting text.
   // Display names, usernames, mentions, replies and forwarded origins grant no trust.
-  if (!message || message.chat?.id !== config.chatId ||
-      (message.message_thread_id ?? null) !== config.topicId ||
-      (config.topicId === null && message.is_topic_message) || message.from?.id !== config.raidarId ||
+  // A blank topic means "no forum topic". Telegram also puts a reply-thread ID
+  // on ordinary replies in groups without topics, so only is_topic_message may
+  // exclude a message there. A configured topic must match exactly.
+  const wrongTopic = config.topicId === null
+    ? Boolean(message?.is_topic_message)
+    : (message?.message_thread_id ?? null) !== config.topicId;
+  if (!message || message.chat?.id !== config.chatId || wrongTopic || message.from?.id !== config.raidarId ||
       !message.from?.is_bot || message.sender_chat || message.forward_origin) return null;
   const text = message.text || message.caption || '';
   // Raidar's first line is a lifecycle header; quoted post content is not.

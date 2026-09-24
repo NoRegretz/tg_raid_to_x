@@ -83,6 +83,10 @@ export class Store {
   skipPending(detail) {
     return this.db.prepare("UPDATE raids SET status='skipped', detail=? WHERE status='pending'").run(detail).changes;
   }
+  // True when X already rejected this exact text as a duplicate since `since`.
+  rejectedAsDuplicate(text, since) {
+    return Boolean(this.db.prepare("SELECT 1 FROM raids WHERE status='duplicate' AND text=? AND created_at>? LIMIT 1").get(text, since));
+  }
   recent() { return this.db.prepare('SELECT * FROM raids ORDER BY rowid DESC LIMIT 5').all(); }
   close() { this.db.close(); }
 }

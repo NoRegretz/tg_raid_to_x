@@ -56,7 +56,7 @@ Started: {started_at}
 
 Replace the example group link with yours. Nothing is appended automatically. Preview text shows the saved template; a dry-run notification shows expanded values. Saving or previewing never publishes to X.
 
-A saved change applies to future raid detections. X may reject repeated identical posts; any posting error pauses further attempts.` },
+A saved change applies to future raid detections. X rejects repeated identical posts, so include {started_at} to make every notification unique. A duplicate rejection does not pause posting: that exact text is skipped for 24 hours without X requests. Any other posting error pauses further attempts.` },
   { id: 'guidehealth', title: 'Health & troubleshooting', text: `📖 Owner guide · 4/4
 
 HEALTH AND USAGE

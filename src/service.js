@@ -1,5 +1,5 @@
 import { detectRaid } from './detect.js';
-import { parseCommand, renderText, validateText, validateTemplate } from './text.js';
+import { parseCommand, renderText, validateText, validateTemplate, clip, duplicateTip, DUPLICATE_TIP } from './text.js';
 import { DEFAULT_X_LIMITS } from './x-budget.js';
 import { OwnerPanel, isOwnerDM, CONTROLS_KEYBOARD } from './owner-panel.js';
 
@@ -20,6 +20,26 @@ export class Service {
   async notify(text) {
     try { await this.telegram.send(this.config.ownerId, text, CONTROLS_KEYBOARD); }
     catch { this.log('Owner DM could not be delivered. Check /status after starting the bot in DM.'); }
+  }
+  // Polling entry point. One update that cannot be processed must not stop the
+  // bot: Telegram would redeliver it after every restart and loop forever.
+  // Skipping it matches what a restart would do anyway (no catch-up posting).
+  async processUpdate(update) {
+    try { await this.handleUpdate(update); }
+    catch (error) {
+      this.log(`Update ${update.update_id} could not be processed and was skipped: ${error.message}`);
+      const offset = Number(this.store.get('offset') || 0);
+      // If the database itself cannot be written, stop rather than skip silently.
+      if (update.update_id >= offset) this.store.set('offset', update.update_id + 1);
+    }
+  }
+  // Shares the X notice key, so a Raidar spam of one text sends one DM, and the
+  // next successful post re-arms it.
+  async duplicateNotice() {
+    const message = `X rejected a raid notification because its text matched a recent post.\nPosting is NOT paused. Raids that would repeat the same text are skipped for 24 hours without spending X requests.\n${DUPLICATE_TIP}`;
+    if (this.store.get('x_block_notice') === message) return;
+    this.store.set('x_block_notice', message);
+    await this.notify(message);
   }
   async handleUpdate(update) {
     const offset = Number(this.store.get('offset') || 0);
@@ -105,7 +125,9 @@ export class Service {
   command(message, command) {
     if (command.name === 'where') {
       const replied = message.reply_to_message;
-      return [`Chat ID: ${message.chat.id}\nTopic ID: ${message.message_thread_id || '(none; leave TELEGRAM_TOPIC_ID blank for a group without topics)'}\nYour ID: ${message.from.id}` +
+      // A reply in a group without topics carries a reply-thread ID, not a topic ID.
+      const topic = message.is_topic_message ? message.message_thread_id : null;
+      return [`Chat ID: ${message.chat.id}\nTopic ID: ${topic || '(none; leave TELEGRAM_TOPIC_ID blank for a group without topics)'}\nYour ID: ${message.from.id}` +
         (replied ? `\nReplied sender ID: ${replied.from?.id || '(anonymous)'}\nReplied sender is bot: ${Boolean(replied.from?.is_bot)}` : '\nReply to a Raidar message with /where to get its sender ID.')];
     }
     if (message.chat.type !== 'private' || message.chat.id !== this.config.ownerId) return [];
@@ -156,13 +178,13 @@ export class Service {
       const result = validateTemplate(command.body);
       if (!result.valid) return [`Not saved. ${result.error}\n\nUsage: /text followed by a space or newline, then the entire notification.`];
       this.store.set('text', command.body);
-      return [`Saved (${result.length}/280 weighted characters). Use /preview to see the exact text.`];
+      return [`Saved (${result.length}/280 weighted characters). Use /preview to see the exact text.${duplicateTip(command.body)}`];
     }
     if (command.name === 'preview') return [this.store.get('text') || 'No text saved. Send /text followed by your notification.'];
     if (command.name === 'diagnose') return [this.store.get('access_check') || 'Restart the bot to run the access check.'];
     if (command.name === 'status') {
       const recent = this.store.recent().map((r) => `${r.status}: ${r.key}\n${r.x_post_id ? `https://x.com/i/web/status/${r.x_post_id}` : r.detail || '(queued)'}`).join('\n\n');
-      return [`Watching: ${this.watching ? "ON" : "OFF"} (${this.watchMode})\nPosting pause: ${this.store.get("posting_paused") || "none"}\nMode: ${this.config.dryRun ? 'DRY RUN (no X posts)' : 'LIVE'}\nAccepting starts after: ${new Date(this.startedAt * 1000).toISOString()}\nChat: ${this.config.chatId ?? 'not configured'}\nTopic: ${this.config.topicId ?? 'none (group without topics)'}\nRaidar: ${this.config.raidarId ?? 'not configured'}\nText: ${this.store.get('text') ? 'saved' : 'not set'}\nX account: ${this.store.get('x_account') || 'not connected'}\n\nLast Raidar update received:\n${this.store.get('last_raidar_update') || 'None yet'}\n\nLast configured-group update received:\n${this.store.get('last_group_update') || 'None yet'}\n\nLast detection:\n${this.store.get('last_observed') || 'None yet'}\n\nRecent raids:\n${recent || 'None yet'}`.slice(0, 4000)];
+      return [clip(`Watching: ${this.watching ? "ON" : "OFF"} (${this.watchMode})\nPosting pause: ${this.store.get("posting_paused") || "none"}\nMode: ${this.config.dryRun ? 'DRY RUN (no X posts)' : 'LIVE'}\nAccepting starts after: ${new Date(this.startedAt * 1000).toISOString()}\nChat: ${this.config.chatId ?? 'not configured'}\nTopic: ${this.config.topicId ?? 'none (group without topics)'}\nRaidar: ${this.config.raidarId ?? 'not configured'}\nText: ${this.store.get('text') ? 'saved' : 'not set'}\nX account: ${this.store.get('x_account') || 'not connected'}\n\nLast Raidar update received:\n${this.store.get('last_raidar_update') || 'None yet'}\n\nLast configured-group update received:\n${this.store.get('last_group_update') || 'None yet'}\n\nLast detection:\n${this.store.get('last_observed') || 'None yet'}\n\nRecent raids:\n${recent || 'None yet'}`)];
     }
     return ['Raid notifier commands (owner DM only):\n/watch — watch future raid starts\n/unwatch — stop watching (manual mode)\n/mode manual — stop watching; remember future ON/OFF choices\n/mode always — watch now and after restarts\n/text <your full notification> — save text\n/preview — show saved text/template\n/status — settings and delivery results\n/limits — X request counts and pause status\n/pause — stop posting\n/resume — allow future raids (does not reset limits)\n/diagnose — startup Telegram access check\n\nOptional placeholders: {raid_url} for the target X post; {started_at} for the event time in UTC.\n\nIn the raid topic, reply to Raidar with /where to receive setup IDs here.\nSpaces, line breaks and standard emojis are preserved. Telegram bold/italic/custom emoji formatting is not converted to X rich text.'];
   }
@@ -197,9 +219,24 @@ export class Service {
       await this.notify(raid.text);
       return true;
     }
+    // X already refused this exact text as a duplicate recently. Sending it
+    // again would spend a request on a certain rejection.
+    if (this.store.rejectedAsDuplicate(raid.text, this.now() - 86400)) {
+      this.store.update(raid.key, 'skipped', 'X rejected identical text as a duplicate in the last 24 hours; no X request sent.');
+      await this.duplicateNotice();
+      return true;
+    }
     let post;
     try { post = await this.x.post(raid.text); }
     catch (error) {
+      // A duplicate rejection is certain and specific to this text. It must not
+      // pause posting, or one repeated text would block every later raid.
+      if (error.duplicate) {
+        this.store.update(raid.key, 'duplicate', 'X rejected identical text as a duplicate. Posting continues for different text.');
+        this.log(`Raid ${raid.key}: duplicate`);
+        await this.duplicateNotice();
+        return true;
+      }
       if (error.localBlock) {
         this.store.update(raid.key, 'skipped', error.message);
         // A spammed Raidar start cannot also spam the owner's DMs indefinitely.

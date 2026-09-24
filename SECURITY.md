@@ -7,7 +7,7 @@ Reviewed for the Raidar-to-X workflow on 2026-09-13. This is a code review and a
 | Previously possible | Current protection |
 | --- | --- |
 | An authorized Raidar operator repeatedly starts raids and causes repeated X requests | Owner-controlled watch windows, persistent lifetime and rolling request caps, post cap; no default cooldown |
-| X rejects posts but every subsequent raid attempts another paid request | First posting error pauses later posts; owner resume required |
+| X rejects posts but every subsequent raid attempts another paid request | First posting error pauses later posts; owner resume required. A duplicate-text rejection instead blocks only that exact text for 24 hours, locally and without further X requests |
 | A 429 results in additional automatic attempts | Automatic posting retries removed |
 | Restart loops repeatedly request the X account identity | Credential-specific cache; uncached lookups count toward the same lifetime and rolling caps |
 | Repeated use of the account-ID helper performs unlimited account reads | Helper shares the persistent cache and budget |
